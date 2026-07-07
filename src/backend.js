@@ -25,10 +25,10 @@ export const auth = {
     return data.session;
   },
 
-  /* 세션 변경 구독 → 구독 해제 함수 반환 */
+  /* 세션 변경 구독 → 구독 해제 함수 반환. cb(session, event) */
   onChange(cb) {
     if (mode === "local") return () => {};
-    const { data } = supabase.auth.onAuthStateChange((_e, session) => cb(session));
+    const { data } = supabase.auth.onAuthStateChange((event, session) => cb(session, event));
     return () => data.subscription.unsubscribe();
   },
 
@@ -47,6 +47,19 @@ export const auth = {
   async signOut() {
     if (mode === "local") return;
     await supabase.auth.signOut();
+  },
+
+  /* 비밀번호 재설정 메일 발송 — 메일의 링크를 누르면 앱으로 돌아와 새 비밀번호를 정할 수 있다 */
+  async resetPassword(email) {
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw error;
+  },
+
+  /* 새 비밀번호로 변경 (복구 세션 또는 로그인 상태에서) */
+  async updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
   },
 
   async currentUserId() {

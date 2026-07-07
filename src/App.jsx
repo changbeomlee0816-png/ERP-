@@ -2008,6 +2008,8 @@ function AuthGate({ onToast }) {
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
 
+  const isReset = tab === "reset";
+
   const submit = async (e) => {
     e.preventDefault();
     setErr(""); setInfo(""); setBusy(true);
@@ -2015,10 +2017,13 @@ function AuthGate({ onToast }) {
       if (tab === "signin") {
         await auth.signIn(email.trim(), pw);
         onToast("로그인되었습니다");
-      } else {
+      } else if (tab === "signup") {
         const { needsConfirm } = await auth.signUp(email.trim(), pw);
         if (needsConfirm) setInfo("확인 메일을 보냈습니다. 메일의 링크를 눌러 인증한 뒤 로그인하세요.");
         else onToast("가입되어 로그인되었습니다");
+      } else { // reset
+        await auth.resetPassword(email.trim());
+        setInfo("비밀번호 재설정 메일을 보냈습니다. 메일의 링크를 눌러 새 비밀번호를 정하세요. (메일이 안 보이면 스팸함도 확인하세요)");
       }
     } catch (e2) {
       setErr(e2.message || "요청을 처리하지 못했습니다");
@@ -2026,6 +2031,8 @@ function AuthGate({ onToast }) {
       setBusy(false);
     }
   };
+
+  const canSubmit = isReset ? !!email.trim() : (email.trim() && pw.length >= 6);
 
   return (
     <div className="a-wiz">
@@ -2037,21 +2044,87 @@ function AuthGate({ onToast }) {
             <Cloud size={13} /> 클라우드 · 여러 사용자 공유
           </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <Seg options={[{ v: "signin", label: "로그인" }, { v: "signup", label: "회원가입" }]} value={tab} onChange={(v) => { setTab(v); setErr(""); setInfo(""); }} />
-        </div>
+        {!isReset && (
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            <Seg options={[{ v: "signin", label: "로그인" }, { v: "signup", label: "회원가입" }]} value={tab} onChange={(v) => { setTab(v); setErr(""); setInfo(""); }} />
+          </div>
+        )}
+        {isReset && (
+          <div style={{ fontSize: 14.5, fontWeight: 700, textAlign: "center", marginBottom: 4 }}>비밀번호 찾기</div>
+        )}
+        {isReset && (
+          <div className="a-hint" style={{ textAlign: "center", marginBottom: 14 }}>가입한 이메일(=아이디)을 입력하면 재설정 링크를 보내드립니다.</div>
+        )}
         <form onSubmit={submit}>
-          <Field label="이메일"><input className="a-input" type="email" value={email} autoFocus autoComplete="email" onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" /></Field>
-          <Field label="비밀번호"><input className="a-input" type="password" value={pw} autoComplete={tab === "signin" ? "current-password" : "new-password"} onChange={(e) => setPw(e.target.value)} placeholder="6자 이상" /></Field>
+          <Field label={isReset ? "이메일 (아이디)" : "이메일"}><input className="a-input" type="email" value={email} autoFocus autoComplete="email" onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" /></Field>
+          {!isReset && (
+            <Field label="비밀번호"><input className="a-input" type="password" value={pw} autoComplete={tab === "signin" ? "current-password" : "new-password"} onChange={(e) => setPw(e.target.value)} placeholder="6자 이상" /></Field>
+          )}
           {err && <div style={{ color: "#d70015", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
           {info && <div style={{ color: "#248a3d", fontSize: 12.5, marginBottom: 10 }}>{info}</div>}
-          <button className="a-btn a-btn-pri" type="submit" disabled={busy || !email.trim() || pw.length < 6} style={{ width: "100%" }}>
-            <Lock size={14} /> {busy ? "처리 중…" : tab === "signin" ? "로그인" : "가입하고 시작"}
+          <button className="a-btn a-btn-pri" type="submit" disabled={busy || !canSubmit} style={{ width: "100%" }}>
+            <Lock size={14} /> {busy ? "처리 중…" : isReset ? "재설정 메일 보내기" : tab === "signin" ? "로그인" : "가입하고 시작"}
           </button>
         </form>
+        {tab === "signin" && (
+          <div style={{ textAlign: "center", marginTop: 12 }}>
+            <button type="button" onClick={() => { setTab("reset"); setErr(""); setInfo(""); }}
+              style={{ border: 0, background: "transparent", color: "#0071e3", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+              비밀번호를 잊으셨나요?
+            </button>
+          </div>
+        )}
+        {isReset && (
+          <div style={{ textAlign: "center", marginTop: 12 }}>
+            <button type="button" onClick={() => { setTab("signin"); setErr(""); setInfo(""); }}
+              style={{ border: 0, background: "transparent", color: "#0071e3", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+              ← 로그인으로 돌아가기
+            </button>
+          </div>
+        )}
         <div className="a-hint" style={{ textAlign: "center", marginTop: 14 }}>
           같은 회사 데이터를 여러 직원이 공유합니다. 변경 사항은 실시간으로 반영됩니다.
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* 비밀번호 재설정 링크로 돌아왔을 때 — 새 비밀번호 설정 화면 */
+function SetNewPassword({ onDone, onToast }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(""); setBusy(true);
+    try {
+      await auth.updatePassword(pw);
+      onToast("비밀번호가 변경되었습니다");
+      onDone();
+    } catch (e2) {
+      setErr(e2.message || "변경하지 못했습니다");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="a-wiz">
+      <div className="a-wiz-card" style={{ maxWidth: 400 }}>
+        <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>새 비밀번호 설정</div>
+        <div className="a-hint" style={{ marginBottom: 16 }}>사용할 새 비밀번호를 입력하세요 (6자 이상).</div>
+        <form onSubmit={submit}>
+          <Field label="새 비밀번호"><input className="a-input" type="password" value={pw} autoFocus autoComplete="new-password" onChange={(e) => setPw(e.target.value)} placeholder="6자 이상" /></Field>
+          <Field label="새 비밀번호 확인"><input className="a-input" type="password" value={pw2} autoComplete="new-password" onChange={(e) => setPw2(e.target.value)} placeholder="다시 입력" /></Field>
+          {pw && pw2 && pw !== pw2 && <div style={{ color: "#d70015", fontSize: 12.5, marginBottom: 10 }}>비밀번호가 일치하지 않습니다</div>}
+          {err && <div style={{ color: "#d70015", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+          <button className="a-btn a-btn-pri" type="submit" disabled={busy || pw.length < 6 || pw !== pw2} style={{ width: "100%" }}>
+            <Check size={14} /> {busy ? "변경 중…" : "비밀번호 변경"}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -2087,6 +2160,7 @@ export default function App() {
   const [session, setSession] = useState(mode === "local" ? { local: true } : undefined); // undefined=확인중, null=로그인필요
   const [setupError, setSetupError] = useState(null); // 테이블 미생성 등
   const [me, setMe] = useState(null); // 현재 로그인 사용자 { id, email } (Supabase)
+  const [recovery, setRecovery] = useState(false); // 비밀번호 재설정 링크로 진입한 상태
   const [view, setView] = useState("dashboard");
   const [palette, setPalette] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
@@ -2106,7 +2180,10 @@ export default function App() {
     let off = () => {};
     (async () => {
       setSession(await auth.getSession());
-      off = auth.onChange((s) => setSession(s));
+      off = auth.onChange((s, event) => {
+        setSession(s);
+        if (event === "PASSWORD_RECOVERY") setRecovery(true);
+      });
     })();
     return () => off();
   }, []);
@@ -2476,6 +2553,17 @@ export default function App() {
   const isAdmin = mode === "local" || myRole === "관리자";
 
   /* ---------- 렌더 ---------- */
+
+  /* 비밀번호 재설정 링크로 진입 → 새 비밀번호 설정 (다른 화면보다 우선) */
+  if (mode === "supabase" && recovery) {
+    return (
+      <div className="erp-root" style={{ display: "block", overflow: "auto" }}>
+        <style>{CSS}</style>
+        <SetNewPassword onToast={T} onDone={() => setRecovery(false)} />
+        <div className="a-toasts">{toasts.map((t) => <div key={t.id} className="a-toast"><Check size={14} color="#34c759" /> {t.msg}</div>)}</div>
+      </div>
+    );
+  }
 
   /* 세션 확인 중 (Supabase) */
   if (session === undefined) {

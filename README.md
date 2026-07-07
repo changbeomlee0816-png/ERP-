@@ -43,10 +43,19 @@ npm run build
 > 저장이 우선합니다(last-write-wins). 대규모 동시 편집이 필요해지면 엔티티별 정규화 테이블로
 > 확장할 수 있습니다.
 
+## 데이터 내보내기 (CSV / Excel)
+
+주요 리포트와 마스터 데이터에 **CSV 내보내기** 버튼이 있습니다. UTF-8 BOM 을 포함해
+Excel 에서 한글이 깨지지 않고 바로 열리며, 금액은 계산 가능한 숫자 원본으로 내보냅니다.
+
+- 전표 조회(라인 단위) · 시산표 · 재무제표 · 재고 현황 · 채권·채무 · 코스트센터
+- 계정과목 · 거래처 · 자재 · 사원 · 코스트센터 (마스터 데이터)
+
 ## 구조
 
 - `src/App.jsx` — 전체 UI · 라우팅 · 회계 통합 전기(Posting) 로직 · 로그인 게이트
 - `src/backend.js` — 인증 · 상태 저장 · Realtime 추상화 (Supabase / localStorage 자동 전환)
 - `src/supabaseClient.js` — Supabase 클라이언트 초기화
 - `src/storage.js` — localStorage 폴백 어댑터
+- `src/exportCsv.js` — CSV 내보내기 유틸 (UTF-8 BOM)
 - `supabase/schema.sql` — 데이터베이스 스키마 · RLS · Realtime

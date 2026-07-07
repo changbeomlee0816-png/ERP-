@@ -7,6 +7,7 @@ import {
   BookOpen, CreditCard, Layers, Banknote, GitBranch, LogOut, Cloud, Lock
 } from "lucide-react";
 import { auth, store, mode, TABLE_MISSING } from "./backend.js";
+import { downloadCSV } from "./exportCsv.js";
 
 /* ============================================================
    FlexERP — SAP 구조를 참고한 단일 파일 ERP 프로토타입
@@ -450,6 +451,24 @@ function PageHead({ title, sub, action }) {
   );
 }
 
+/* CSV 내보내기 버튼 — build(): [headers, rows] 를 반환. 데이터가 없으면 비활성화 */
+function ExportBtn({ filename, build, disabled, label = "CSV 내보내기", T }) {
+  return (
+    <button
+      className="a-btn a-btn-sec a-btn-sm"
+      disabled={disabled}
+      onClick={() => {
+        const [headers, rows] = build();
+        if (!rows || rows.length === 0) { T && T("내보낼 데이터가 없습니다"); return; }
+        downloadCSV(filename + "-" + today(), headers, rows);
+        T && T("CSV 파일을 내려받았습니다");
+      }}
+    >
+      <Download size={14} /> {label}
+    </button>
+  );
+}
+
 /* ============================================================
    초기 설정 마법사 (회사코드 · 업종 → 모듈 자동 구성, SAP SPRO 개념 단순화)
    ============================================================ */
@@ -813,7 +832,11 @@ function MasterPage({ entityKey, data, api, T }) {
   return (
     <div className="a-page">
       <PageHead title={entity.title} sub={entity.sub + "  ·  T-code " + entity.tcode}
-        action={<button className="a-btn a-btn-pri" onClick={() => setModal("new")}><Plus size={15} /> 신규 등록</button>} />
+        action={<div style={{ display: "flex", gap: 8 }}>
+          <ExportBtn filename={entity.key} T={T} disabled={rows.length === 0}
+            build={() => [entity.fields.map((f) => f.label), rows.map((r) => entity.fields.map((f) => r[f.key]))]} />
+          <button className="a-btn a-btn-pri" onClick={() => setModal("new")}><Plus size={15} /> 신규 등록</button>
+        </div>} />
       <div className="a-card">
         <div style={{ padding: "14px 16px 4px" }}>
           <input className="a-input" style={{ maxWidth: 300 }} placeholder="검색" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -958,13 +981,30 @@ function JEDetailModal({ je, data, api, onClose }) {
   );
 }
 
-function JEListPage({ data, api }) {
+function JEListPage({ data, api, T }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(null);
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase();
     return data.journals.filter((j) => !t || j.docNo.includes(t) || (j.desc || "").toLowerCase().includes(t));
   }, [data.journals, q]);
+
+  /* 전표 라인 단위로 내보내기 (회계 분석에 유용) */
+  const exportJE = () => {
+    const headers = ["문서번호", "전기일", "적요", "출처", "역분개여부", "계정코드", "계정과목", "차변", "대변", "코스트센터", "거래처"];
+    const out = [];
+    rows.forEach((j) => j.lines.forEach((l) => {
+      const a = acctById(data, l.accountId);
+      out.push([
+        j.docNo, j.date, j.desc, j.source, j.reversed ? "역분개됨" : "",
+        a ? a.code : "", a ? a.name : "(삭제된 계정)",
+        Number(l.dr) || 0, Number(l.cr) || 0,
+        l.costCenterId ? (ccById(data, l.costCenterId) || {}).name || "" : "",
+        l.partnerId ? (partnerById(data, l.partnerId) || {}).name || "" : "",
+      ]);
+    }));
+    return [headers, out];
+  };
   const cols = [
     { key: "docNo", label: "문서번호", render: (r) => <span style={{ fontVariantNumeric: "tabular-nums" }}>{r.docNo}</span> },
     { key: "date", label: "전기일" },
@@ -979,7 +1019,8 @@ function JEListPage({ data, api }) {
   ];
   return (
     <div className="a-page">
-      <PageHead title="전표 조회" sub={"총 " + data.journals.length + "건 · 행을 누르면 상세 · 역분개(FB08) 가능 · T-code FB03"} />
+      <PageHead title="전표 조회" sub={"총 " + data.journals.length + "건 · 행을 누르면 상세 · 역분개(FB08) 가능 · T-code FB03"}
+        action={<ExportBtn filename="전표" T={T} disabled={rows.length === 0} label="전표 라인 CSV" build={exportJE} />} />
       <div className="a-card">
         <div style={{ padding: "14px 16px 4px" }}>
           <input className="a-input" style={{ maxWidth: 300 }} placeholder="문서번호 · 적요 검색" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -992,14 +1033,22 @@ function JEListPage({ data, api }) {
   );
 }
 
-function TrialBalancePage({ data }) {
+function TrialBalancePage({ data, T }) {
   const bals = accountBalances(data);
   const rows = [...data.accounts].sort((a, b) => a.code.localeCompare(b.code))
     .map((a) => ({ a, b: bals[a.id] })).filter((x) => x.b);
   const tot = rows.reduce((s, x) => ({ dr: s.dr + x.b.dr, cr: s.cr + x.b.cr }), { dr: 0, cr: 0 });
+  const exportTB = () => [
+    ["계정코드", "계정과목", "구분", "차변합계", "대변합계", "차변잔액", "대변잔액"],
+    rows.map(({ a, b }) => {
+      const net = b.dr - b.cr;
+      return [a.code, a.name, a.type, b.dr, b.cr, net > 0 ? net : 0, net < 0 ? -net : 0];
+    }),
+  ];
   return (
     <div className="a-page">
-      <PageHead title="시산표" sub="누적 합계잔액시산표 · 모든 자동/수동 전표 반영 · T-code F.08" />
+      <PageHead title="시산표" sub="누적 합계잔액시산표 · 모든 자동/수동 전표 반영 · T-code F.08"
+        action={<ExportBtn filename="시산표" T={T} disabled={rows.length === 0} build={exportTB} />} />
       <div className="a-card">
         {rows.length === 0 ? <Empty icon={Scale} title="집계할 전표가 없습니다" /> : (
           <div className="a-tablewrap">
@@ -1218,12 +1267,17 @@ function GRPage({ data, api, T }) {
   );
 }
 
-function StockPage({ data }) {
+function StockPage({ data, T }) {
   const rows = data.materials.filter((m) => m.type !== "서비스");
   const total = rows.reduce((s, m) => s + (Number(m.stock) || 0) * (Number(m.cost) || 0), 0);
+  const exportStock = () => [
+    ["자재코드", "자재명", "유형", "단위", "현재고", "표준원가", "재고금액"],
+    rows.map((m) => [m.code, m.name, m.type, m.unit, Number(m.stock) || 0, Number(m.cost) || 0, (Number(m.stock) || 0) * (Number(m.cost) || 0)]),
+  ];
   return (
     <div className="a-page">
-      <PageHead title="재고 현황" sub="표준원가 기준 재고 평가 · 입고 · 출고 · 생산으로 자동 증감 · T-code MMBE" />
+      <PageHead title="재고 현황" sub="표준원가 기준 재고 평가 · 입고 · 출고 · 생산으로 자동 증감 · T-code MMBE"
+        action={<ExportBtn filename="재고현황" T={T} disabled={rows.length === 0} build={exportStock} />} />
       <div className="a-card">
         {rows.length === 0 ? <Empty icon={Boxes} title="재고 자재가 없습니다" sub="마스터데이터 > 자재에서 등록하세요" /> : (
           <div className="a-tablewrap">
@@ -1488,7 +1542,7 @@ function ProductionPage({ data, api, T }) {
    CO 관리회계 — 코스트센터별 비용 리포트
    ============================================================ */
 
-function CostCenterPage({ data }) {
+function CostCenterPage({ data, T }) {
   const rows = useMemo(() => {
     const map = {};
     data.journals.forEach((j) => j.lines.forEach((l) => {
@@ -1507,9 +1561,14 @@ function CostCenterPage({ data }) {
   }, [data]);
   const max = Math.max(1, ...rows.map((r) => r.amt));
   const total = rows.reduce((s, r) => s + r.amt, 0);
+  const exportCC = () => [
+    ["코스트센터", "비용금액", "비율(%)"],
+    rows.map((r) => [r.name, r.amt, total ? Math.round((r.amt / total) * 100) : 0]),
+  ];
   return (
     <div className="a-page">
-      <PageHead title="코스트센터 리포트" sub="비용 계정 전표를 코스트센터별로 집계 (누적) · T-code S_ALR_87013611" />
+      <PageHead title="코스트센터 리포트" sub="비용 계정 전표를 코스트센터별로 집계 (누적) · T-code S_ALR_87013611"
+        action={<ExportBtn filename="코스트센터" T={T} disabled={rows.length === 0} build={exportCC} />} />
       <div className="a-card" style={{ padding: 20 }}>
         {rows.length === 0 ? <Empty icon={PieChart} title="집계할 비용이 없습니다" sub="전표 입력 시 비용 라인에 코스트센터를 지정하세요" /> : (
           <div style={{ display: "grid", gap: 14 }}>
@@ -2290,13 +2349,13 @@ export default function App() {
     case "dashboard": page = <Dashboard data={data} go={go} />; break;
     case "fi-je": page = <JEPage {...props} />; break;
     case "fi-list": page = <JEListPage {...props} />; break;
-    case "fi-tb": page = <TrialBalancePage data={data} />; break;
-    case "fi-fs": page = <FinancialStatementsPage data={data} />; break;
-    case "fi-ar": page = <ARAPPage data={data} />; break;
-    case "co-cc": page = <CostCenterPage data={data} />; break;
+    case "fi-tb": page = <TrialBalancePage data={data} T={T} />; break;
+    case "fi-fs": page = <FinancialStatementsPage data={data} T={T} />; break;
+    case "fi-ar": page = <ARAPPage data={data} T={T} />; break;
+    case "co-cc": page = <CostCenterPage data={data} T={T} />; break;
     case "mm-po": page = <POPage {...props} />; break;
     case "mm-gr": page = <GRPage {...props} />; break;
-    case "mm-stock": page = <StockPage data={data} />; break;
+    case "mm-stock": page = <StockPage data={data} T={T} />; break;
     case "sd-so": page = <SOPage {...props} />; break;
     case "sd-dl": page = <DeliveryPage {...props} />; break;
     case "sd-iv": page = <BillingPage {...props} />; break;
@@ -2368,7 +2427,7 @@ function soFlow(data, so) {
   return out;
 }
 
-function FinancialStatementsPage({ data }) {
+function FinancialStatementsPage({ data, T }) {
   const [period, setPeriod] = useState("month");
   const nowKey = monthKey(today());
   const balsOf = (journals) => {
@@ -2419,9 +2478,30 @@ function FinancialStatementsPage({ data }) {
     <div className="a-fsrow"><span>{name}</span><span style={neg ? { color: "#ff3b30" } : null}>{fmt(v)}</span></div>
   );
 
+  const exportFS = () => {
+    const out = [];
+    out.push(["[손익계산서]", period === "month" ? nowKey + " (이번 달)" : "누적", ""]);
+    out.push(["구분", "계정", "금액"]);
+    rev.forEach((r) => out.push(["수익", r.a.code + " " + r.a.name, r.v]));
+    out.push(["", "수익 합계", totRev]);
+    exp.forEach((r) => out.push(["비용", r.a.code + " " + r.a.name, r.v]));
+    out.push(["", "비용 합계", totExp]);
+    out.push(["", "당기순이익", ni]);
+    out.push(["", "", ""]);
+    out.push(["[재무상태표]", "누적", ""]);
+    assets.forEach((r) => out.push(["자산", r.a.code + " " + r.a.name, r.v]));
+    out.push(["", "자산 총계", totA]);
+    liabs.forEach((r) => out.push(["부채", r.a.code + " " + r.a.name, r.v]));
+    eqs.forEach((r) => out.push(["자본", r.a.code + " " + r.a.name, r.v]));
+    out.push(["자본", "당기순이익 (누적)", niAll]);
+    out.push(["", "부채·자본 총계", totLE]);
+    return [["구분", "계정", "금액"], out];
+  };
+
   return (
     <div className="a-page">
-      <PageHead title="재무제표" sub="손익계산서 · 재무상태표 — 총계정원장(GL) 전표 기준 · T-code F.01" />
+      <PageHead title="재무제표" sub="손익계산서 · 재무상태표 — 총계정원장(GL) 전표 기준 · T-code F.01"
+        action={<ExportBtn filename="재무제표" T={T} build={exportFS} />} />
       <div className="a-cols2">
         <div className="a-card" style={{ padding: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -2464,7 +2544,7 @@ function FinancialStatementsPage({ data }) {
   );
 }
 
-function ARAPPage({ data }) {
+function ARAPPage({ data, T }) {
   const arId = acctIdByCode(data, "10800");
   const apId = acctIdByCode(data, "25100");
   const rows = useMemo(() => {
@@ -2482,9 +2562,14 @@ function ARAPPage({ data }) {
       .sort((a, b) => (b.ar + b.ap) - (a.ar + a.ap));
   }, [data]);
   const tot = rows.reduce((s, r) => ({ ar: s.ar + r.ar, ap: s.ap + r.ap }), { ar: 0, ap: 0 });
+  const exportARAP = () => [
+    ["거래처", "외상매출금", "외상매입금", "순채권"],
+    rows.map((r) => [r.name, r.ar, r.ap, r.ar - r.ap]),
+  ];
   return (
     <div className="a-page">
-      <PageHead title="채권 · 채무" sub="거래처별 외상매출금(받을 돈) · 외상매입금(줄 돈) 잔액 · T-code FBL5N / FBL1N" />
+      <PageHead title="채권 · 채무" sub="거래처별 외상매출금(받을 돈) · 외상매입금(줄 돈) 잔액 · T-code FBL5N / FBL1N"
+        action={<ExportBtn filename="채권채무" T={T} disabled={rows.length === 0} build={exportARAP} />} />
       <div className="a-card">
         {rows.length === 0 ? (
           <Empty icon={CreditCard} title="채권 · 채무 잔액이 없습니다" sub="청구 · 입고 · 수금 · 지급 시 거래처별로 자동 집계됩니다" />

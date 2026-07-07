@@ -59,6 +59,16 @@ Supabase 모드에서 여러 직원이 같은 회사를 공유할 때 역할로 
 
 대시보드에 **전월 대비** 카드가 있어 매출 · 매입 · 영업손익을 지난달과 비교하고 증감액·증감율을 보여줍니다.
 
+## 배포 (Cloudflare Workers · 자동)
+
+`claude/erp-system-data-enhancement-hh27b1`(또는 `main`)에 push 하면 GitHub Actions 가
+빌드 후 Cloudflare Workers(`funfun`)에 자동 배포합니다. 고정 주소:
+**https://funfun.changbeomlee0816.workers.dev/** — 코드를 고쳐 push 해도 주소는 그대로이고
+최신 버전이 같은 주소에 반영됩니다.
+
+- 설정: `wrangler.toml`(정적 자산 워커), `.github/workflows/deploy-cloudflare.yml`
+- 필요한 저장소 secret: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+
 ## 모바일 지원
 
 휴대폰(≤560px)에서도 사용할 수 있게 반응형으로 동작합니다. 사이드바는 상단 ☰ 버튼으로 여는

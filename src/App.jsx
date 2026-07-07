@@ -4,9 +4,9 @@ import {
   Boxes, ClipboardList, Truck, Receipt, Factory, Users, Landmark, Building2,
   Package, Target, Settings, Search, Plus, X, Trash2, Menu, Check, Download,
   Upload, RotateCcw, Wallet, TrendingUp, CircleDollarSign, ChevronRight,
-  BookOpen, CreditCard, Layers, Banknote, GitBranch
+  BookOpen, CreditCard, Layers, Banknote, GitBranch, LogOut, Cloud, Lock
 } from "lucide-react";
-import { storage } from "./storage.js";
+import { auth, store, mode, TABLE_MISSING } from "./backend.js";
 
 /* ============================================================
    FlexERP — SAP 구조를 참고한 단일 파일 ERP 프로토타입
@@ -1614,8 +1614,10 @@ function SettingsPage({ data, api, T }) {
             <button className="a-btn a-btn-danger" onClick={() => setResetArm(true)}><RotateCcw size={15} /> 전체 초기화</button>
           )}
         </div>
-        <div className="a-hint" style={{ marginTop: 10 }}>
-          데이터는 이 브라우저에 자동 저장됩니다. 실운영 전환 시 이 구조 그대로 단일 HTML + Supabase(멀티유저 · 실시간)로 옮길 수 있습니다.
+        <div className="a-hint" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+          {mode === "supabase"
+            ? <><Cloud size={13} /> Supabase 클라우드에 자동 저장됩니다 — 여러 사용자가 실시간으로 같은 데이터를 공유합니다.</>
+            : <>데이터는 이 브라우저(localStorage)에 자동 저장됩니다. .env 에 Supabase 정보를 넣으면 멀티유저 · 실시간 모드로 전환됩니다.</>}
         </div>
       </div>
     </div>
@@ -1783,13 +1785,102 @@ function Sidebar({ data, view, go, open }) {
   );
 }
 
+/* ============================================================
+   로그인 · 회원가입 (Supabase Auth · 이메일)
+   ============================================================ */
+
+function AuthGate({ onToast }) {
+  const [tab, setTab] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(""); setInfo(""); setBusy(true);
+    try {
+      if (tab === "signin") {
+        await auth.signIn(email.trim(), pw);
+        onToast("로그인되었습니다");
+      } else {
+        const { needsConfirm } = await auth.signUp(email.trim(), pw);
+        if (needsConfirm) setInfo("확인 메일을 보냈습니다. 메일의 링크를 눌러 인증한 뒤 로그인하세요.");
+        else onToast("가입되어 로그인되었습니다");
+      }
+    } catch (e2) {
+      setErr(e2.message || "요청을 처리하지 못했습니다");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="a-wiz">
+      <div className="a-wiz-card" style={{ maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div className="dot" style={{ width: 46, height: 46, borderRadius: 13, background: "linear-gradient(135deg,#0a84ff,#0055cc)", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 20, boxShadow: "0 4px 14px rgba(0,90,220,.35)" }}>F</div>
+          <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-.02em", marginTop: 12 }}>FlexERP</div>
+          <div style={{ fontSize: 13, color: "#86868b", marginTop: 3, display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Cloud size={13} /> 클라우드 · 여러 사용자 공유
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+          <Seg options={[{ v: "signin", label: "로그인" }, { v: "signup", label: "회원가입" }]} value={tab} onChange={(v) => { setTab(v); setErr(""); setInfo(""); }} />
+        </div>
+        <form onSubmit={submit}>
+          <Field label="이메일"><input className="a-input" type="email" value={email} autoFocus autoComplete="email" onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" /></Field>
+          <Field label="비밀번호"><input className="a-input" type="password" value={pw} autoComplete={tab === "signin" ? "current-password" : "new-password"} onChange={(e) => setPw(e.target.value)} placeholder="6자 이상" /></Field>
+          {err && <div style={{ color: "#d70015", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+          {info && <div style={{ color: "#248a3d", fontSize: 12.5, marginBottom: 10 }}>{info}</div>}
+          <button className="a-btn a-btn-pri" type="submit" disabled={busy || !email.trim() || pw.length < 6} style={{ width: "100%" }}>
+            <Lock size={14} /> {busy ? "처리 중…" : tab === "signin" ? "로그인" : "가입하고 시작"}
+          </button>
+        </form>
+        <div className="a-hint" style={{ textAlign: "center", marginTop: 14 }}>
+          같은 회사 데이터를 여러 직원이 공유합니다. 변경 사항은 실시간으로 반영됩니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Supabase 테이블이 아직 생성되지 않았을 때 안내 */
+function SupabaseSetupNotice({ onSignOut }) {
+  return (
+    <div className="a-wiz">
+      <div className="a-wiz-card" style={{ maxWidth: 520 }}>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>한 가지만 더 설정하면 됩니다</div>
+        <div className="a-hint" style={{ marginBottom: 14, lineHeight: 1.6 }}>
+          Supabase 프로젝트에 <b>erp_state</b> 테이블이 아직 없습니다. 저장소의
+          <code style={{ background: "rgba(0,0,0,.06)", padding: "1px 6px", borderRadius: 6, margin: "0 4px" }}>supabase/schema.sql</code>
+          내용을 복사해 Supabase 대시보드의 <b>SQL Editor</b>에 붙여넣고 한 번 실행한 뒤, 이 페이지를 새로고침하세요.
+        </div>
+        <ol style={{ fontSize: 13, color: "#515154", lineHeight: 1.9, paddingLeft: 18, marginBottom: 16 }}>
+          <li>Supabase 대시보드 → SQL Editor 열기</li>
+          <li><code>supabase/schema.sql</code> 전체 붙여넣기 → Run</li>
+          <li>이 페이지 새로고침 → 설정 마법사가 나타납니다</li>
+        </ol>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="a-btn a-btn-sec" onClick={onSignOut}>로그아웃</button>
+          <button className="a-btn a-btn-pri" onClick={() => window.location.reload()}><RotateCcw size={14} /> 새로고침</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(undefined); // undefined=로딩, null=마법사
+  const [session, setSession] = useState(mode === "local" ? { local: true } : undefined); // undefined=확인중, null=로그인필요
+  const [setupError, setSetupError] = useState(null); // 테이블 미생성 등
   const [view, setView] = useState("dashboard");
   const [palette, setPalette] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   const saveT = useRef(null);
+  const lastJson = useRef(null); // Realtime 에코(내 저장이 되돌아오는 것) 무시용
 
   const T = (msg) => {
     const id = uid();
@@ -1797,22 +1888,59 @@ export default function App() {
     setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)), 2600);
   };
 
-  /* 로드 */
+  /* 세션 확인 · 구독 (Supabase 모드) */
   useEffect(() => {
+    if (mode === "local") return;
+    let off = () => {};
+    (async () => {
+      setSession(await auth.getSession());
+      off = auth.onChange((s) => setSession(s));
+    })();
+    return () => off();
+  }, []);
+
+  /* 로그인된 뒤 상태 로드 */
+  useEffect(() => {
+    if (session === undefined || session === null) return;
+    let cancelled = false;
     (async () => {
       try {
-        const r = await storage.get("erp:state");
-        setData(r && r.value ? JSON.parse(r.value) : null);
-      } catch { setData(null); }
+        const s = await store.getState();
+        if (cancelled) return;
+        lastJson.current = s ? JSON.stringify(s) : null;
+        setData(s);
+        setSetupError(null);
+      } catch (e) {
+        if (cancelled) return;
+        if (e && e.code === TABLE_MISSING) setSetupError("table");
+        else setSetupError("load");
+        setData(null);
+      }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [session]);
+
+  /* 다른 사용자의 저장을 Realtime 으로 수신 */
+  useEffect(() => {
+    if (mode === "local" || !session) return;
+    const off = store.subscribe((remote) => {
+      const j = remote ? JSON.stringify(remote) : null;
+      if (j === lastJson.current) return; // 내가 방금 저장한 것 → 무시
+      lastJson.current = j;
+      setData(remote);
+    });
+    return () => off();
+  }, [session]);
 
   /* 디바운스 저장 */
   useEffect(() => {
     if (!data) return;
+    const json = JSON.stringify(data);
+    if (json === lastJson.current) return; // 원격에서 받은 값이면 다시 저장하지 않음
     if (saveT.current) clearTimeout(saveT.current);
     saveT.current = setTimeout(async () => {
-      try { await storage.set("erp:state", JSON.stringify(data)); } catch (e) { /* 저장 실패 무시 */ }
+      try { lastJson.current = json; await store.setState(data); }
+      catch (e) { T("저장 실패 — 네트워크 또는 권한을 확인하세요"); }
     }, 700);
     return () => { if (saveT.current) clearTimeout(saveT.current); };
   }, [data]);
@@ -2097,13 +2225,45 @@ export default function App() {
     },
     importData: (obj) => setData(obj),
     resetAll: async () => {
-      try { await storage.delete("erp:state"); } catch (e) { /* 무시 */ }
+      try { await store.deleteState(); } catch (e) { /* 무시 */ }
+      lastJson.current = null;
       setView("dashboard");
       setData(null);
     },
   };
 
   /* ---------- 렌더 ---------- */
+
+  /* 세션 확인 중 (Supabase) */
+  if (session === undefined) {
+    return (
+      <div className="erp-root" style={{ alignItems: "center", justifyContent: "center" }}>
+        <style>{CSS}</style>
+        <div style={{ color: "#86868b", fontSize: 14, animation: "fadeUp .5s ease" }}>세션 확인 중…</div>
+      </div>
+    );
+  }
+
+  /* 로그인 필요 (Supabase) */
+  if (session === null) {
+    return (
+      <div className="erp-root" style={{ display: "block", overflow: "auto" }}>
+        <style>{CSS}</style>
+        <AuthGate onToast={T} />
+        <div className="a-toasts">{toasts.map((t) => <div key={t.id} className="a-toast"><Check size={14} color="#34c759" /> {t.msg}</div>)}</div>
+      </div>
+    );
+  }
+
+  /* Supabase 테이블 미생성 안내 */
+  if (setupError === "table") {
+    return (
+      <div className="erp-root" style={{ display: "block", overflow: "auto" }}>
+        <style>{CSS}</style>
+        <SupabaseSetupNotice onSignOut={async () => { await auth.signOut(); }} />
+      </div>
+    );
+  }
 
   if (data === undefined) {
     return (
@@ -2165,6 +2325,11 @@ export default function App() {
           <button className="a-search" onClick={() => setPalette(true)}>
             <Search size={14} /> <span className="lbl">메뉴 · T-code 검색</span> <span className="a-kbd">⌘K</span>
           </button>
+          {mode === "supabase" && (
+            <button className="a-icon-btn" title="로그아웃" onClick={async () => { await auth.signOut(); }}>
+              <LogOut size={17} />
+            </button>
+          )}
         </div>
         {page}
       </div>

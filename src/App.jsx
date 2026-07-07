@@ -341,6 +341,34 @@ const CSS = `
   .a-search .lbl { display: none; }
 }
 
+/* 휴대폰 (≤560px) — 좁은 화면 최적화 */
+@media (max-width: 560px) {
+  .erp-root { font-size: 13.5px; }
+  .a-page { padding: 16px 12px 48px; }
+  .a-h1 { font-size: 22px; }
+  .a-h1sub { font-size: 12.5px; }
+  .a-phead { gap: 10px; margin-bottom: 16px; }
+  .a-topbar { padding: 0 14px; gap: 8px; }
+  .a-topbar .a-hint { display: none; }        /* 좁은 상단바에서 '코드 XXXX' 숨김 */
+  .a-stats { gap: 10px; }
+  .a-stat { padding: 15px; border-radius: 15px; }
+  .a-stat .vl { font-size: 21px; }
+  .a-card { border-radius: 15px; }
+  .a-card + .a-card { margin-top: 12px; }
+
+  /* 넓은 표는 셀을 한 줄로 유지하고 가로 스크롤 — 줄바꿈으로 뭉개지지 않게 */
+  .a-table th, .a-table td { padding: 10px 12px; font-size: 13px; white-space: nowrap; }
+  .a-tablewrap { -webkit-overflow-scrolling: touch; }
+
+  /* 모달 · 버튼 · 팔레트 */
+  .a-modal-t { font-size: 16px; }
+  .a-modal-h { padding: 16px 16px 10px; }
+  .a-modal-b { padding: 4px 16px 16px; }
+  .a-btn { padding: 8px 15px; }
+  .a-overlay { padding: 4vh 10px 10px; }
+  .a-palette { max-width: 100%; }
+}
+
 /* 인쇄 · PDF 저장 — 현재 열려 있는 리포트만 깔끔하게 출력 */
 @media print {
   .a-side, .a-topbar, .a-toasts, .a-mask, .a-burger, .a-btn, .a-seg, .no-print { display: none !important; }
@@ -2536,7 +2564,7 @@ export default function App() {
       <div className="a-main">
         <div className="a-topbar">
           <button className="a-burger" onClick={() => setSideOpen(true)}><Menu size={19} /></button>
-          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{data.company.name}<span className="a-hint" style={{ marginLeft: 7 }}>코드 {data.company.code}</span></div>
+          <div style={{ fontSize: 13.5, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.company.name}<span className="a-hint" style={{ marginLeft: 7 }}>코드 {data.company.code}</span></div>
           <div className="sp" />
           <button className="a-search" onClick={() => setPalette(true)}>
             <Search size={14} /> <span className="lbl">메뉴 · T-code 검색</span> <span className="a-kbd">⌘K</span>

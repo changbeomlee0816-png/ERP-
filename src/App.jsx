@@ -4,7 +4,8 @@ import {
   Boxes, ClipboardList, Truck, Receipt, Factory, Users, Landmark, Building2,
   Package, Target, Settings, Search, Plus, X, Trash2, Menu, Check, Download,
   Upload, RotateCcw, Wallet, TrendingUp, CircleDollarSign, ChevronRight,
-  BookOpen, CreditCard, Layers, Banknote, GitBranch, LogOut, Cloud, Lock
+  BookOpen, CreditCard, Layers, Banknote, GitBranch, LogOut, Cloud, Lock,
+  Printer, Shield, TrendingDown, UserCog, Minus
 } from "lucide-react";
 import { auth, store, mode, TABLE_MISSING } from "./backend.js";
 import { downloadCSV } from "./exportCsv.js";
@@ -339,6 +340,17 @@ const CSS = `
   .a-cols2 { grid-template-columns: 1fr; }
   .a-search .lbl { display: none; }
 }
+
+/* 인쇄 · PDF 저장 — 현재 열려 있는 리포트만 깔끔하게 출력 */
+@media print {
+  .a-side, .a-topbar, .a-toasts, .a-mask, .a-burger, .a-btn, .a-seg, .no-print { display: none !important; }
+  .erp-root { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+  .a-main { overflow: visible !important; height: auto !important; }
+  .a-page { max-width: none !important; padding: 0 !important; margin: 0 !important; animation: none !important; }
+  .a-card { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; margin-top: 12px !important; }
+  .a-cols2 { grid-template-columns: 1fr 1fr !important; }
+  .a-h1 { font-size: 22px !important; }
+}
 `;
 
 /* ---------- 공통 UI 컴포넌트 ---------- */
@@ -465,6 +477,15 @@ function ExportBtn({ filename, build, disabled, label = "CSV 내보내기", T })
       }}
     >
       <Download size={14} /> {label}
+    </button>
+  );
+}
+
+/* 인쇄 / PDF 버튼 — 브라우저 인쇄 대화상자에서 'PDF로 저장' 선택 */
+function PrintBtn({ label = "인쇄 · PDF" }) {
+  return (
+    <button className="a-btn a-btn-sec a-btn-sm" onClick={() => window.print()}>
+      <Printer size={14} /> {label}
     </button>
   );
 }
@@ -1048,7 +1069,7 @@ function TrialBalancePage({ data, T }) {
   return (
     <div className="a-page">
       <PageHead title="시산표" sub="누적 합계잔액시산표 · 모든 자동/수동 전표 반영 · T-code F.08"
-        action={<ExportBtn filename="시산표" T={T} disabled={rows.length === 0} build={exportTB} />} />
+        action={<div style={{ display: "flex", gap: 8 }}><PrintBtn /><ExportBtn filename="시산표" T={T} disabled={rows.length === 0} build={exportTB} /></div>} />
       <div className="a-card">
         {rows.length === 0 ? <Empty icon={Scale} title="집계할 전표가 없습니다" /> : (
           <div className="a-tablewrap">
@@ -1595,10 +1616,12 @@ function CostCenterPage({ data, T }) {
    설정 — 회사 정보 · 모듈 구성 · 데이터 관리 (SPRO 단순화)
    ============================================================ */
 
-function SettingsPage({ data, api, T }) {
+function SettingsPage({ data, api, T, isAdmin, me, myRole }) {
   const [c, setC] = useState({ ...data.company });
   const [resetArm, setResetArm] = useState(false);
   const fileRef = useRef(null);
+  const members = data.members || [];
+  const adminCount = members.filter((m) => m.role === "관리자").length;
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -1626,32 +1649,86 @@ function SettingsPage({ data, api, T }) {
 
   return (
     <div className="a-page">
-      <PageHead title="설정" sub="회사 · 모듈 · 데이터 구성 · T-code SPRO" />
+      <PageHead title="설정" sub={"회사 · 모듈 · 권한 · 데이터 구성 · T-code SPRO"}
+        action={mode === "supabase" ? <Badge color={isAdmin ? "blue" : "gray"}>{isAdmin ? "관리자" : "일반 사용자"}</Badge> : null} />
+
+      {!isAdmin && (
+        <div className="a-card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 9 }}>
+          <Lock size={15} color="#86868b" />
+          <span className="a-hint">일반 사용자 권한입니다. 회사 정보 · 모듈 · 권한 · 데이터 초기화는 관리자만 변경할 수 있습니다.</span>
+        </div>
+      )}
 
       <div className="a-card" style={{ padding: 20 }}>
         <div className="a-card-t" style={{ marginBottom: 14 }}>회사 정보</div>
         <div className="a-grid2">
-          <Field label="회사명"><input className="a-input" value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} /></Field>
-          <Field label="회사코드"><input className="a-input" value={c.code} onChange={(e) => setC({ ...c, code: e.target.value })} /></Field>
-          <Field label="대표자"><input className="a-input" value={c.ceo} onChange={(e) => setC({ ...c, ceo: e.target.value })} /></Field>
-          <Field label="사업자등록번호"><input className="a-input" value={c.bizNo} onChange={(e) => setC({ ...c, bizNo: e.target.value })} /></Field>
+          <Field label="회사명"><input className="a-input" value={c.name} disabled={!isAdmin} onChange={(e) => setC({ ...c, name: e.target.value })} /></Field>
+          <Field label="회사코드"><input className="a-input" value={c.code} disabled={!isAdmin} onChange={(e) => setC({ ...c, code: e.target.value })} /></Field>
+          <Field label="대표자"><input className="a-input" value={c.ceo} disabled={!isAdmin} onChange={(e) => setC({ ...c, ceo: e.target.value })} /></Field>
+          <Field label="사업자등록번호"><input className="a-input" value={c.bizNo} disabled={!isAdmin} onChange={(e) => setC({ ...c, bizNo: e.target.value })} /></Field>
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button className="a-btn a-btn-pri a-btn-sm" onClick={() => { api.updateCompany(c); T("회사 정보를 저장했습니다"); }}><Check size={14} /> 저장</button>
-        </div>
+        {isAdmin && (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="a-btn a-btn-pri a-btn-sm" onClick={() => { api.updateCompany(c); T("회사 정보를 저장했습니다"); }}><Check size={14} /> 저장</button>
+          </div>
+        )}
       </div>
+
+      {mode === "supabase" && (
+        <div className="a-card" style={{ padding: 20 }}>
+          <div className="a-card-t" style={{ display: "flex", alignItems: "center", gap: 7 }}><Shield size={16} /> 사용자 권한</div>
+          <div className="a-card-s" style={{ marginBottom: 12 }}>
+            {isAdmin
+              ? "가입한 직원이 자동으로 목록에 추가됩니다. 관리자만 역할을 변경할 수 있습니다."
+              : "현재 회사에 등록된 사용자 목록입니다. 역할 변경은 관리자 권한이 필요합니다."}
+          </div>
+          {members.length === 0 ? (
+            <div className="a-hint">아직 등록된 사용자가 없습니다.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 2 }}>
+              {members.slice().sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0)).map((m) => {
+                const isSelf = me && m.userId === me.id;
+                const lastAdmin = m.role === "관리자" && adminCount <= 1;
+                return (
+                  <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 2px", borderBottom: "1px solid rgba(0,0,0,.04)" }}>
+                    <div className="av" style={{ width: 30, height: 30, borderRadius: "50%", background: "#e8e8ed", color: "#515154", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(m.email || "?").slice(0, 1).toUpperCase()}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}{isSelf && <span className="a-hint" style={{ fontWeight: 400 }}> (나)</span>}</div>
+                    </div>
+                    {isAdmin ? (
+                      <>
+                        <Seg options={[{ v: "관리자", label: "관리자" }, { v: "일반", label: "일반" }]} value={m.role}
+                          onChange={(v) => {
+                            if (v === m.role) return;
+                            if (lastAdmin && v === "일반") { T("최소 1명의 관리자가 필요합니다"); return; }
+                            api.setMemberRole(m.userId, v); T(m.email + " → " + v);
+                          }} />
+                        {!isSelf && (
+                          <button className="a-icon-btn red" title="제거" onClick={() => { api.removeMember(m.userId); T("사용자를 제거했습니다"); }}><Trash2 size={15} /></button>
+                        )}
+                      </>
+                    ) : (
+                      <Badge color={m.role === "관리자" ? "blue" : "gray"}>{m.role}</Badge>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="a-card" style={{ padding: 20 }}>
         <div className="a-card-t">모듈 구성</div>
-        <div className="a-card-s" style={{ marginBottom: 12 }}>업체 상황에 맞게 켜고 끕니다 — 메뉴와 대시보드에 즉시 반영됩니다.</div>
+        <div className="a-card-s" style={{ marginBottom: 12 }}>업체 상황에 맞게 켜고 끕니다 — 메뉴와 대시보드에 즉시 반영됩니다.{!isAdmin && " (관리자 전용)"}</div>
         <div style={{ display: "grid", gap: 4 }}>
           {Object.keys(MODULE_INFO).map((k) => (
-            <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 2px", borderBottom: "1px solid rgba(0,0,0,.04)" }}>
+            <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 2px", borderBottom: "1px solid rgba(0,0,0,.04)", opacity: isAdmin ? 1 : 0.7 }}>
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 600, fontSize: 14 }}>{k} · {MODULE_INFO[k].name}</span>
                 <div className="a-hint">{MODULE_INFO[k].en} — {MODULE_INFO[k].desc}</div>
               </div>
-              <Switch on={!!data.modules[k]} onChange={() => api.toggleModule(k)} />
+              <Switch on={!!data.modules[k]} onChange={() => { if (isAdmin) api.toggleModule(k); else T("모듈 구성은 관리자만 변경할 수 있습니다"); }} />
             </div>
           ))}
         </div>
@@ -1661,17 +1738,19 @@ function SettingsPage({ data, api, T }) {
         <div className="a-card-t" style={{ marginBottom: 12 }}>데이터 관리</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="a-btn a-btn-sec" onClick={exportJson}><Download size={15} /> JSON 백업</button>
-          <button className="a-btn a-btn-sec" onClick={() => fileRef.current && fileRef.current.click()}><Upload size={15} /> 백업 가져오기</button>
-          <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importJson} />
-          <div style={{ flex: 1 }} />
-          {resetArm ? (
-            <>
-              <button className="a-btn a-btn-sec" onClick={() => setResetArm(false)}>취소</button>
-              <button className="a-btn a-btn-danger" onClick={() => api.resetAll()}><RotateCcw size={15} /> 정말 초기화</button>
-            </>
-          ) : (
-            <button className="a-btn a-btn-danger" onClick={() => setResetArm(true)}><RotateCcw size={15} /> 전체 초기화</button>
-          )}
+          {isAdmin && <>
+            <button className="a-btn a-btn-sec" onClick={() => fileRef.current && fileRef.current.click()}><Upload size={15} /> 백업 가져오기</button>
+            <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importJson} />
+            <div style={{ flex: 1 }} />
+            {resetArm ? (
+              <>
+                <button className="a-btn a-btn-sec" onClick={() => setResetArm(false)}>취소</button>
+                <button className="a-btn a-btn-danger" onClick={() => api.resetAll()}><RotateCcw size={15} /> 정말 초기화</button>
+              </>
+            ) : (
+              <button className="a-btn a-btn-danger" onClick={() => setResetArm(true)}><RotateCcw size={15} /> 전체 초기화</button>
+            )}
+          </>}
         </div>
         <div className="a-hint" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
           {mode === "supabase"
@@ -1695,6 +1774,26 @@ function Dashboard({ data, go }) {
   const purch = data.goodsReceipts.filter((g) => monthKey(g.date) === nowKey).reduce((s, g) => s + g.amount, 0);
   const invVal = data.materials.filter((m) => m.type !== "서비스").reduce((s, m) => s + (Number(m.stock) || 0) * (Number(m.cost) || 0), 0);
   const cash = balanceOfCode(data, "10100", "dr") + balanceOfCode(data, "10300", "dr");
+
+  /* 전월 대비 비교 — 매출 · 매입 · 영업손익 (해당 월 전표 기준) */
+  const lastKey = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
+  const salesOf = (k) => data.invoices.filter((i) => monthKey(i.date) === k).reduce((s, i) => s + i.amount, 0);
+  const purchOf = (k) => data.goodsReceipts.filter((g) => monthKey(g.date) === k).reduce((s, g) => s + g.amount, 0);
+  const profitOf = (k) => {
+    let rev = 0, exp = 0;
+    data.journals.filter((j) => monthKey(j.date) === k).forEach((j) => j.lines.forEach((l) => {
+      const a = acctById(data, l.accountId);
+      if (!a) return;
+      if (a.type === "수익") rev += (Number(l.cr) || 0) - (Number(l.dr) || 0);
+      else if (a.type === "비용") exp += (Number(l.dr) || 0) - (Number(l.cr) || 0);
+    }));
+    return rev - exp;
+  };
+  const compare = [
+    { label: "매출", now: salesOf(nowKey), prev: salesOf(lastKey), good: "up" },
+    { label: "매입", now: purchOf(nowKey), prev: purchOf(lastKey), good: "down" },
+    { label: "영업손익", now: profitOf(nowKey), prev: profitOf(lastKey), good: "up" },
+  ];
 
   const months = [];
   { const d = new Date(); for (let i = 5; i >= 0; i--) { const t = new Date(d.getFullYear(), d.getMonth() - i, 1); months.push({ key: t.toISOString().slice(0, 7), label: (t.getMonth() + 1) + "월" }); } }
@@ -1741,6 +1840,31 @@ function Dashboard({ data, go }) {
         <div className="a-stat"><div className="lb"><ShoppingCart size={14} /> 이번 달 매입 (입고 기준)</div><div className="vl">{fmt(purch)}</div><div className="sb">MM 입고 합계</div></div>
         <div className="a-stat"><div className="lb"><Boxes size={14} /> 재고자산</div><div className="vl">{fmt(invVal)}</div><div className="sb">표준원가 × 현재고</div></div>
         <div className="a-stat"><div className="lb"><Wallet size={14} /> 현금 · 예금</div><div className="vl">{fmt(cash)}</div><div className="sb">FI 총계정원장 잔액</div></div>
+      </div>
+
+      <div className="a-card" style={{ padding: 20 }}>
+        <div className="a-card-t" style={{ marginBottom: 4 }}>전월 대비</div>
+        <div className="a-card-s" style={{ marginBottom: 14 }}>{lastKey} → {nowKey} · 매출·매입은 문서, 영업손익은 전표 기준</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+          {compare.map((c) => {
+            const diff = c.now - c.prev;
+            const pct = c.prev !== 0 ? Math.round((diff / Math.abs(c.prev)) * 100) : (c.now !== 0 ? 100 : 0);
+            const positive = c.good === "up" ? diff > 0 : diff < 0;
+            const flat = diff === 0;
+            const color = flat ? "#86868b" : positive ? "#248a3d" : "#d70015";
+            const Ico = flat ? Minus : diff > 0 ? TrendingUp : TrendingDown;
+            return (
+              <div key={c.label} style={{ border: "1px solid rgba(0,0,0,.06)", borderRadius: 14, padding: "14px 16px" }}>
+                <div style={{ fontSize: 12.5, color: "#86868b", fontWeight: 500 }}>{c.label}</div>
+                <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-.02em", marginTop: 6, fontVariantNumeric: "tabular-nums" }}>{fmt(c.now)}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5, fontSize: 12.5, color, fontWeight: 600 }}>
+                  <Ico size={13} /> {diff >= 0 ? "+" : "−"}{fmt(Math.abs(diff))} <span style={{ opacity: .8 }}>({diff >= 0 ? "+" : "−"}{Math.abs(pct)}%)</span>
+                </div>
+                <div className="a-hint" style={{ marginTop: 3 }}>전월 {fmt(c.prev)}</div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {todo.length > 0 && (
@@ -1810,7 +1934,7 @@ function Dashboard({ data, go }) {
    앱 셸 — 사이드바 · 탑바 · 라우팅 · 저장 · API
    ============================================================ */
 
-function Sidebar({ data, view, go, open }) {
+function Sidebar({ data, view, go, open, me, myRole }) {
   return (
     <aside className={"a-side" + (open ? " open" : "")}>
       <div className="a-side-logo">
@@ -1834,10 +1958,10 @@ function Sidebar({ data, view, go, open }) {
         </div>
       ))}
       <div className="a-side-foot">
-        <div className="av">{(data.company.name || "F").slice(0, 1)}</div>
-        <div>
-          <div className="cn">{data.company.name}</div>
-          <div className="cc">코드 {data.company.code} · v1.0 프로토타입</div>
+        <div className="av">{((me && me.email) || data.company.name || "F").slice(0, 1).toUpperCase()}</div>
+        <div style={{ minWidth: 0 }}>
+          <div className="cn" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me ? me.email : data.company.name}</div>
+          <div className="cc">{me ? (data.company.name + " · " + (myRole || "일반")) : ("코드 " + data.company.code + " · v1.0 프로토타입")}</div>
         </div>
       </div>
     </aside>
@@ -1934,6 +2058,7 @@ export default function App() {
   const [data, setData] = useState(undefined); // undefined=로딩, null=마법사
   const [session, setSession] = useState(mode === "local" ? { local: true } : undefined); // undefined=확인중, null=로그인필요
   const [setupError, setSetupError] = useState(null); // 테이블 미생성 등
+  const [me, setMe] = useState(null); // 현재 로그인 사용자 { id, email } (Supabase)
   const [view, setView] = useState("dashboard");
   const [palette, setPalette] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
@@ -1978,6 +2103,26 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, [session]);
+
+  /* 현재 로그인 사용자 정보 로드 */
+  useEffect(() => {
+    if (mode === "local" || !session) { setMe(null); return; }
+    auth.currentUser().then((u) => setMe(u));
+  }, [session]);
+
+  /* 로그인 사용자를 회사 멤버 명부에 자동 등록.
+     첫 사용자(명부 비어있음)는 관리자, 이후 가입자는 일반 사용자로 등록된다. */
+  useEffect(() => {
+    if (mode === "local" || !me || !data) return;
+    const members = data.members || [];
+    if (members.some((m) => m.userId === me.id)) return;
+    setData((d) => {
+      const cur = d.members || [];
+      if (cur.some((m) => m.userId === me.id)) return d;
+      const role = cur.length === 0 ? "관리자" : "일반";
+      return { ...d, members: [...cur, { userId: me.id, email: me.email, role, addedAt: Date.now() }] };
+    });
+  }, [me, data]);
 
   /* 다른 사용자의 저장을 Realtime 으로 수신 */
   useEffect(() => {
@@ -2289,7 +2434,18 @@ export default function App() {
       setView("dashboard");
       setData(null);
     },
+
+    setMemberRole: (userId, role) => setData((d) => ({
+      ...d, members: (d.members || []).map((m) => (m.userId === userId ? { ...m, role } : m)),
+    })),
+    removeMember: (userId) => setData((d) => ({
+      ...d, members: (d.members || []).filter((m) => m.userId !== userId),
+    })),
   };
+
+  /* 권한 — 로컬 모드는 단독 사용이므로 항상 관리자 */
+  const myRole = mode === "local" ? "관리자" : ((data && data.members) || []).find((m) => me && m.userId === me.id)?.role;
+  const isAdmin = mode === "local" || myRole === "관리자";
 
   /* ---------- 렌더 ---------- */
 
@@ -2344,6 +2500,7 @@ export default function App() {
   }
 
   const props = { data, api, T, go };
+  const adminProps = { isAdmin, me, myRole };
   let page = null;
   switch (view) {
     case "dashboard": page = <Dashboard data={data} go={go} />; break;
@@ -2367,14 +2524,14 @@ export default function App() {
     case "md-partner": page = <MasterPage entityKey="partners" {...props} />; break;
     case "md-mat": page = <MasterPage entityKey="materials" {...props} />; break;
     case "md-cc": page = <MasterPage entityKey="costCenters" {...props} />; break;
-    case "settings": page = <SettingsPage {...props} />; break;
+    case "settings": page = <SettingsPage {...props} {...adminProps} />; break;
     default: page = <Dashboard data={data} go={go} />;
   }
 
   return (
     <div className="erp-root">
       <style>{CSS}</style>
-      <Sidebar data={data} view={view} go={go} open={sideOpen} />
+      <Sidebar data={data} view={view} go={go} open={sideOpen} me={me} myRole={myRole} />
       {sideOpen && <div className="a-mask" onClick={() => setSideOpen(false)} />}
       <div className="a-main">
         <div className="a-topbar">
@@ -2501,7 +2658,7 @@ function FinancialStatementsPage({ data, T }) {
   return (
     <div className="a-page">
       <PageHead title="재무제표" sub="손익계산서 · 재무상태표 — 총계정원장(GL) 전표 기준 · T-code F.01"
-        action={<ExportBtn filename="재무제표" T={T} build={exportFS} />} />
+        action={<div style={{ display: "flex", gap: 8 }}><PrintBtn /><ExportBtn filename="재무제표" T={T} build={exportFS} /></div>} />
       <div className="a-cols2">
         <div className="a-card" style={{ padding: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>

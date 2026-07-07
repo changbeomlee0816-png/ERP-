@@ -54,6 +54,13 @@ export const auth = {
     const { data } = await supabase.auth.getUser();
     return data.user ? data.user.id : null;
   },
+
+  /* 현재 로그인 사용자 { id, email } (로컬 모드는 null) */
+  async currentUser() {
+    if (mode === "local") return null;
+    const { data } = await supabase.auth.getUser();
+    return data.user ? { id: data.user.id, email: data.user.email } : null;
+  },
 };
 
 /* ---------- 상태 저장/불러오기 ---------- */

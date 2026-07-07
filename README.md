@@ -61,13 +61,15 @@ Supabase 모드에서 여러 직원이 같은 회사를 공유할 때 역할로 
 
 ## 배포 (Cloudflare Workers · 자동)
 
-`claude/erp-system-data-enhancement-hh27b1`(또는 `main`)에 push 하면 GitHub Actions 가
-빌드 후 Cloudflare Workers(`funfun`)에 자동 배포합니다. 고정 주소:
+Cloudflare 대시보드의 **Git 연동(Workers Builds)** 이 저장소에 연결되어 있어, push 하면
+Cloudflare 가 직접 빌드·배포합니다. 고정 주소:
 **https://funfun.changbeomlee0816.workers.dev/** — 코드를 고쳐 push 해도 주소는 그대로이고
 최신 버전이 같은 주소에 반영됩니다.
 
-- 설정: `wrangler.toml`(정적 자산 워커), `.github/workflows/deploy-cloudflare.yml`
-- 필요한 저장소 secret: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+- 설정은 `wrangler.toml` 하나에 있습니다:
+  - `[build] command = "npm run build"` — 배포 전에 Vite 빌드를 실행해 `dist` 생성
+  - `[assets] directory = "./dist"` — 빌드 결과를 정적 자산으로 서빙 (SPA fallback 포함)
+- 별도의 GitHub Actions 워크플로나 secret 은 필요 없습니다 (Cloudflare 가 알아서 빌드).
 
 ## 모바일 지원
 

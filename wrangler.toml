@@ -3,6 +3,12 @@
 name = "funfun"
 compatibility_date = "2024-11-01"
 
+# 배포 직전에 Vite 빌드를 실행 → dist 생성 후 배포.
+# 이 덕분에 Cloudflare 자체 Git 연동(Workers Builds)이 `npx wrangler deploy` 만
+# 실행해도 dist 가 만들어져 배포가 성공합니다.
+[build]
+command = "npm run build"
+
 [assets]
 directory = "./dist"
 # SPA 라우팅: 없는 경로는 index.html 로 (새로고침/딥링크 대비)

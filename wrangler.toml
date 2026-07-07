@@ -1,0 +1,9 @@
+# Cloudflare Workers 배포 설정 — 정적 자산(dist)만 서빙하는 워커
+# 워커 이름이 곧 URL 이 됩니다: https://funfun.<계정 서브도메인>.workers.dev/
+name = "funfun"
+compatibility_date = "2024-11-01"
+
+[assets]
+directory = "./dist"
+# SPA 라우팅: 없는 경로는 index.html 로 (새로고침/딥링크 대비)
+not_found_handling = "single-page-application"

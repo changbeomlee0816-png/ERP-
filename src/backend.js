@@ -111,9 +111,13 @@ export const store = {
   },
 
   /* 다른 사용자의 저장을 Realtime 으로 수신 → 구독 해제 함수 반환.
-     cb(newState) 형태로 파싱된 상태 객체를 전달한다. */
+     cb(newState) 형태로 파싱된 상태 객체를 전달한다.
+     Realtime 은 RLS 를 적용하므로 소켓에 로그인 토큰을 반드시 실어야 이벤트가 전달된다. */
   subscribe(cb) {
     if (mode === "local") return () => {};
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) supabase.realtime.setAuth(data.session.access_token);
+    });
     const ch = supabase
       .channel("erp_state_changes")
       .on(

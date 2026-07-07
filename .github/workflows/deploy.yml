@@ -39,11 +39,6 @@ jobs:
       - name: 빌드 (base 경로 = 저장소 이름)
         run: npm run build -- --base=/ERP-/
 
-      - name: Pages 설정 (없으면 자동 활성화 시도)
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - name: 빌드 결과 업로드
         uses: actions/upload-pages-artifact@v3
         with:
